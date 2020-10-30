@@ -1,7 +1,8 @@
 <template>
   <div id="nav">
-    <router-link to="/">Home</router-link> |
-    <router-link to="/about">About</router-link>
+<!--    <router-link to="/">Dynamic Web TWAIN DEMO with Vue.js 3</router-link>-->
+    <h1>Dynamic Web TWAIN DEMO with Vue.js 3</h1>
+    <p>Typescript enabled</p>
   </div>
   <router-view/>
 </template>
