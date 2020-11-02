@@ -3,9 +3,9 @@
     <div id="dwt-container">
     </div>
     <div id="dwt-control">
-      <select v-model="config.activeScannerName" name="scanner">
+      <select v-model="activeScanner" name="scanner">
         <option v-for="(opt, idx) in scanners" :key="idx"
-                :value="opt.name">{{opt.name}}</option>
+                :value="opt">{{opt.name}}</option>
       </select>
       <select v-model="config.resolutionVal">
         <option v-for="(opt, idx) in systemEnum.resolutionOptions" :key="idx"
@@ -55,17 +55,18 @@ const Component = defineComponent({
   },
   setup(props) {
     const { license, resourcePath, webTwainId } = toRefs(props)
-    const { dwtObj, scanners } = useDwt(license.value, resourcePath.value, webTwainId.value, false)
+    const { dwtObj, scanners, activeScanner } = useDwt(license.value, resourcePath.value, webTwainId.value, false)
     console.log(dwtObj.value)
     return {
       dwtObj: dwtObj,
-      scanners: scanners
+      scanners: scanners,
+      activeScanner: activeScanner
     }
   },
   data() {
     return {
       config: {
-        activeScannerName: '',
+        // activeScannerName: '',
         colorModeVal: dwt.EnumDWT_PixelType.TWPT_RGB,
         resolutionVal: 300,
         ifShowUI: true,

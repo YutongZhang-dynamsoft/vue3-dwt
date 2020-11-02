@@ -1,4 +1,4 @@
-import { ref, onMounted, computed } from 'vue'
+import { ref, onMounted, watch } from 'vue'
 
 import dwt from 'dwt'
 import {DWTInitialConfig, WebTwainEnv} from "dwt/Dynamsoft";
@@ -133,18 +133,27 @@ export default function useDwt(license: string, resourcePath: string,
     // console.log(`useDwt: license: ${license}, resourcePath: ${resourcePath}, id: ${id}, createEx: ${createEx}`)
     const dwtObj = ref(null as unknown as WebTwain)
     const scanners = ref([] as Scanner[])
+    const activeScanner = ref(null as unknown as Scanner)
     const init = async () => {
         try {
             dwtObj.value = await _init(license, id, resourcePath, createEx)
             scanners.value = await _getScanners(dwtObj.value)
+            activeScanner.value = scanners.value[0]
         } catch(reason) {
             console.error(reason)
         }
     }
 
     onMounted(init)
+
+    watch(activeScanner, () => {
+        const obj: WebTwain = dwtObj.value
+        obj.SelectSourceByIndex(activeScanner.value.id)
+    })
+
     return {
         dwtObj,
-        scanners
+        scanners,
+        activeScanner
     }
 }
