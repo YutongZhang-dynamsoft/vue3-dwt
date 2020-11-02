@@ -4,7 +4,7 @@
     </div>
     <div id="dwt-control">
       <select v-model="config.activeScannerName" name="scanner">
-        <option v-for="(opt, idx) in systemEnum.scanners" :key="idx"
+        <option v-for="(opt, idx) in scanners" :key="idx"
                 :value="opt.name">{{opt.name}}</option>
       </select>
       <select v-model="config.resolutionVal">
@@ -31,28 +31,39 @@
 </template>
 
 <script lang="ts">
-import { defineComponent } from 'vue'
+import { defineComponent, toRefs } from 'vue'
 import dwt from 'dwt'
+import useDwt from "@/components/useDwt";
 import { WebTwain } from 'dwt/WebTwain'
 import { DeviceConfiguration } from "dwt/WebTwain.Acquire";
 
-interface Scanner {
-  id: number;
-  name: string;
-}
-
 const Component = defineComponent({
-  name: 'dwt',
+  name: 'dwt-composited',
   props: {
     license: {
       type: String,
       default: 'trial key'
+    },
+    resourcePath: {
+      type: String,
+      default: ''
+    },
+    webTwainId: {
+      type: String,
+      default: 'dwt-object'
+    }
+  },
+  setup(props) {
+    const { license, resourcePath, webTwainId } = toRefs(props)
+    const { dwtObj, scanners } = useDwt(license.value, resourcePath.value, webTwainId.value, false)
+    console.log(dwtObj.value)
+    return {
+      dwtObj: dwtObj,
+      scanners: scanners
     }
   },
   data() {
     return {
-      dwtObj: null as unknown as WebTwain,
-      webTwainId: 'dwt-instance',
       config: {
         activeScannerName: '',
         colorModeVal: dwt.EnumDWT_PixelType.TWPT_RGB,
@@ -62,7 +73,6 @@ const Component = defineComponent({
         duplex: false
       },
       systemEnum: {
-        scanners: [] as Scanner[],
         colorModes: [
           { id: dwt.EnumDWT_PixelType.TWPT_BW, text: 'Black & White' },
           { id: dwt.EnumDWT_PixelType.TWPT_GRAY, text: 'Grayscale' },
@@ -76,43 +86,7 @@ const Component = defineComponent({
       }
     }
   },
-  mounted () {
-    this.mountDWT()
-      .then(() => {
-        return new Promise(res => {
-          this.dwtObj = dwt.WebTwainEnv.GetWebTwain(this.webTwainId)
-          res()
-        })
-      })
-      .then(() => {
-        this.getScanners()
-      })
-      .catch(reason => {
-        console.error(reason)
-      })
-  },
   methods: {
-    mountDWT(): Promise<void> {
-      const twenv = dwt.WebTwainEnv
-      return new Promise((res, rej) => {
-        twenv.AutoLoad = false
-        twenv.ResourcesPath = 'dwt-resources'
-        twenv.ProductKey = this.$props.license
-        twenv.Containers = [
-          {
-            WebTwainId: this.webTwainId,
-            ContainerId: 'dwt-container',
-            Width: '800px',
-            Height: '600px',
-            bLocalService: true
-          }
-        ]
-        twenv.OnWebTwainReady = res as () => {}
-        twenv.OnWebTwainNotFound = rej as () => {}
-        twenv.Load()
-        console.log(twenv.Containers)
-      })
-    },
     acquireImage(): void {
       const config: DeviceConfiguration = {
         PixelType: this.config.colorModeVal,
@@ -131,22 +105,6 @@ const Component = defineComponent({
           }
       dwtObj.AcquireImage(config, successCallback, failureCallback)
     },
-    getScanners(): Promise<void|string> {
-      return new Promise((res, rej) => {
-        const dwtObj = this.dwtObj
-        const src: string[] = dwtObj.GetSourceNames(false) as string[]
-        const scanners: Scanner[] = src.map((scanner, idx) => {
-          return { id: idx, name: scanner }
-        })
-        this.systemEnum.scanners = scanners
-        if (scanners.length !== 0) {
-          this.config.activeScannerName = scanners[0].name
-          res()
-        } else {
-          rej('No scanner found')
-        }
-      })
-    },
     openEditor(): void {
       const dwtObj = this.dwtObj
       const viewportWidth = window.innerWidth*0.9
@@ -164,7 +122,7 @@ export default Component
 </script>
 
 <style>
-#dwt-instance {
+#dwt-container {
   margin: 10px auto;
   width: 800px;
   height: 600px;
