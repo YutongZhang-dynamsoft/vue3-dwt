@@ -33,7 +33,8 @@
 <script lang="ts">
 import { defineComponent, toRefs } from 'vue'
 import dwt from 'dwt'
-import useDwt from "@/components/useDwt";
+import useDwt, { DWTEnvConfig } from "@/composable/useDwt";
+import useCamera from "@/composable/useCamera"
 import { WebTwain } from 'dwt/WebTwain'
 import { DeviceConfiguration } from "dwt/WebTwain.Acquire";
 
@@ -53,14 +54,26 @@ const Component = defineComponent({
       default: 'dwt-object'
     }
   },
-  setup(props) {
+  setup(props) {  
     const { license, resourcePath, webTwainId } = toRefs(props)
-    const { dwtObj, scanners, activeScanner } = useDwt(license.value, resourcePath.value, webTwainId.value, false)
+    const config: DWTEnvConfig = {
+      ProductKey: license.value,
+      ResourcesPath: resourcePath.value
+    }
+    const createEx = false
+    const { dwtObj, scanners, activeScanner } = useDwt(config, webTwainId.value, createEx)
     console.log(dwtObj.value)
+    const { camera, cameraSourceOptions, resolutionOptions, rotateOptions } = useCamera(dwtObj.value)
     return {
       dwtObj: dwtObj,
       scanners: scanners,
-      activeScanner: activeScanner
+      activeScanner: activeScanner,
+      camera: {
+        cameraObj: camera,
+        sourceOptions: cameraSourceOptions,
+        resolutionOptions: resolutionOptions,
+        rotateOptions: rotateOptions
+      }
     }
   },
   data() {

@@ -1,8 +1,21 @@
 import { ref, onMounted, watch } from 'vue'
 
 import dwt from 'dwt'
-import {DWTInitialConfig, WebTwainEnv} from "dwt/Dynamsoft";
+import {Container, DWTInitialConfig, WebTwainEnv} from "dwt/Dynamsoft";
 import {WebTwain} from "dwt/WebTwain";
+
+export interface DWTEnvConfig {
+    ActiveXInstallWithCAB?: boolean;
+    AutoLoad?: boolean;
+    Containers?: Container[];
+    IfAddMD5UploadHeader?: boolean;
+    IfConfineMaskWithinTheViewer?: boolean;
+    IfUseActiveXForIE10Plus?: boolean;
+    ProductKey: string;
+    ResourcesPath: string;
+    UseCameraAddonWasm?: boolean;
+    UseLocalService?: boolean;
+}
 
 interface DWTInitResult {
     status: boolean;
@@ -21,37 +34,53 @@ function _unmountDwt(id: string): Promise<DWTInitResult> {
     })
 }
 
-async function _mountDwt(license: string, id: string,
-                         resourcePath: string): Promise<DWTInitResult> {
+async function _mountDwt(id: string, createEx: boolean): Promise<WebTwain> {
     const unMountResult: DWTInitResult = await _unmountDwt(id)
-    return new Promise<DWTInitResult>((res, rej) => {
+    const env: WebTwainEnv = dwt.WebTwainEnv
+    return new Promise((res, rej) => {
         if (!unMountResult.status) {
             console.error(unMountResult)
             rej(unMountResult)
         }
-        if (!license) {
-            console.error('mounted failed due to no license key')
-            rej({ status: false, reason: 'license key should not be empty' })
+        console.log('_createDWTObj')
+        if (createEx) {
+            const config: DWTInitialConfig = {
+                WebTwainId: id
+            }
+            env.CreateDWTObjectEx(config, (twain) => {
+                console.log(twain)
+                console.log('created')
+                res(twain)
+            }, (reason) => {
+                  console.error(reason)
+            })
+        } else {
+            const containers = [
+                {
+                    WebTwainId: id,
+                    ContainerId: id,
+                    Width: '100%',
+                    Height: '100%',
+                    bLocalService: true
+                }
+            ]
+            env.Containers = containers
+            env.OnWebTwainReady = (() => {
+                res(env.GetWebTwain(id))
+            }) as () => {}
+            env.OnWebTwainNotFound = rej as () => {}
+            env.Load()
         }
-        const env: WebTwainEnv = dwt.WebTwainEnv
-        env.AutoLoad = false
-        env.ProductKey = license
-        env.ResourcesPath = resourcePath
-        console.log('done parameters specified')
-        res({ status: true, reason: '' })
     })
 }
-
+/*
 async function _createDWTObj(id: string, createEx: boolean): Promise<WebTwain> {
     const env: WebTwainEnv = dwt.WebTwainEnv
     return new Promise((res, rej) => {
         console.log('_createDWTObj')
         if (createEx) {
             const config: DWTInitialConfig = {
-                WebTwainId: id,
-                // Host: 'localhost',
-                // Port: '',
-                // SSLPort: ''
+                WebTwainId: id
             }
             env.CreateDWTObjectEx(config, (twain) => {
                 console.log(twain)
@@ -76,39 +105,20 @@ async function _createDWTObj(id: string, createEx: boolean): Promise<WebTwain> {
             }) as () => {}
             env.OnWebTwainNotFound = rej as () => {}
             env.Load()
-            // env.CreateDWTObject(id, (twain) => {
-            //     console.log(twain)
-            //     console.log('created')
-            //     res(twain)
-            // }, (reason) => {
-            //     console.error(reason)
-            // })
         }
     })
 }
-
-async function _init(license: string, id: string,
-                    resourcePath: string, createEx: boolean): Promise<WebTwain> {
-    // console.log(`_init: license: ${license}, resourcePath: ${resourcePath}, id: ${id}, createEx: ${createEx}`)
-    let mountResult!: DWTInitResult
-    try {
-        console.log('mounting dwt')
-        mountResult = await _mountDwt(license, id, resourcePath)
-        console.log(mountResult)
-    } catch (e) {
-        console.error(e)
-    }
-    if (!mountResult.status) {
-        console.error('mounted failed')
-        Promise.reject({ errCode: -114514, errString: 'mounted failed' })
-    }
+*/
+async function _init(config: DWTEnvConfig, id: string, createEx: boolean): Promise<WebTwain> {
+    const env = dwt.WebTwainEnv
+    dwt.WebTwainEnv = Object.assign(env, config)
     let dwtObj!: WebTwain
     try {
-        console.log('create dwtobj')
-        dwtObj = await _createDWTObj(id, createEx)
-        console.log(dwtObj)
+        console.log('mounting dwt')
+        dwtObj = await _mountDwt(id, createEx)
     } catch (e) {
         console.error(e)
+        return Promise.reject({ status: false, reason: 'create dwt object failed' })
     }
     return Promise.resolve(dwtObj)
 }
@@ -128,9 +138,40 @@ function _getScanners(dwt: WebTwain): Promise<Scanner[]> {
     })
 }
 
-export default function useDwt(license: string, resourcePath: string,
+export default function useDwt(config: DWTEnvConfig, id: string, createEx: boolean) {
+    if (!config) {
+        throw new Error('empty config')
+    }
+    const dwtObj = ref(null as unknown as WebTwain)
+    const scanners = ref([] as Scanner[])
+    const activeScanner = ref(null as unknown as Scanner)
+    const init = async () => {
+        try {
+            dwtObj.value = await _init(config, id, createEx)
+            console.log('onMounted | useDwt: created')
+            scanners.value = await _getScanners(dwtObj.value)
+            activeScanner.value = scanners.value[0]
+        } catch(reason) {
+            console.error(reason)
+        }
+    }
+
+    onMounted(init)
+
+    watch(activeScanner, () => {
+        const obj: WebTwain = dwtObj.value
+        obj.SelectSourceByIndex(activeScanner.value.id)
+    })
+
+    return {
+        dwtObj,
+        scanners,
+        activeScanner
+    }
+}
+/*
+function useDwtOld(license: string, resourcePath: string,
                                id: string, createEx = false) {
-    // console.log(`useDwt: license: ${license}, resourcePath: ${resourcePath}, id: ${id}, createEx: ${createEx}`)
     const dwtObj = ref(null as unknown as WebTwain)
     const scanners = ref([] as Scanner[])
     const activeScanner = ref(null as unknown as Scanner)
@@ -157,3 +198,4 @@ export default function useDwt(license: string, resourcePath: string,
         activeScanner
     }
 }
+*/
